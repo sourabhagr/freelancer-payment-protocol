@@ -1,3 +1,3 @@
-# MetaCoin Truffle Box
+# FreeLancer Contract Project
 
-MetaCoin example Truffle project
+FreeLancer Contract project
