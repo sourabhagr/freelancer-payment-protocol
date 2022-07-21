@@ -5,8 +5,9 @@ contract FreelanceContract {
     address payable escrowAddr;
     address payable burnAddr;
     int8 MAX_CONFIRMATION_ATTEMPS_ALLOWED = 5;
+    int8 CONTRACT_ACCEPTION_DEADLINE_DAYS = 7;
 
-    enum ContractStatus {CREATED, ACCEPTED_BY_FREELANCER, ACCEPTED_BY_COMPANY, ACCEPTED_BY_BOTH, ASSETS_DELIVERED, EXPIRED_DUE_TO_NON_DELIVERY, ASSETS_ACCEPTED, ASSETS_REJECTED, EXPIRED_DUE_TO_ASSETS_REJECTION, EXPIRED_DUE_TO_NO_CONFIRMATION}
+    enum ContractStatus {CREATED, ACCEPTED_BY_FREELANCER, ACCEPTED_BY_COMPANY, ACCEPTED_BY_BOTH, ASSETS_DELIVERED, EXPIRED_DUE_TO_NON_DELIVERY, ASSETS_ACCEPTED, ASSETS_REJECTED, EXPIRED_DUE_TO_ASSETS_REJECTION, EXPIRED_DUE_TO_NO_CONFIRMATION, EXPIRED_DUE_TO_NO_COMPANY_ACCEPTANCE, EXPIRED_DUE_TO_NO_FREELANCER_ACCEPTANCE}
 
     struct FContract {
         string deliverables;
@@ -18,13 +19,25 @@ contract FreelanceContract {
         uint settlementDate;
         ContractStatus state;
         int8 confirmationAttemps;
+        uint createdDate;
+        string assetsNFTLink;
     }
 
     FContract[] public fContracts;
 
+    event ContractCreated(string _deliverables, address _companyAddr, address _freelancerAddr, uint32 _companyStakedAmt, uint32 _freelancerStakedAmt, uint _deliveryDelay, uint _settlementDelay, address _createdBy, uint _contractId);
+    event StakePostedByCompany(uint _contractId);
+    event StakePostedByFreelancer(uint _contractId);
+    event ContractAccepted(uint _contractId);
+    event DeliverablesUploaded(uint _contractId, address _deliverables);
+    event ContractExpiredDueToNoDelivery(uint _contractId, uint _amountTransferedToCompany, uint _amountTransferedToFreelancer);  //TODO: Should we add expiry date in the event?
+    event ContractExpiredDueToNoConfirmation(uint _contractId, uint _amountTransferedToCompany, uint _amountTransferedToFreelancer);  //TODO: Should we add expiry date in the event?
+
+
     function createFreelancerContract(string memory _deliverables, address payable _companyAddr, address payable _freelancerAddr, uint32 _companyStakedAmt, uint32 _freelancerStakedAmt, uint _deliveryDelay, uint _settlementDelay) public {
         require((msg.sender == _companyAddr) || (msg.sender == _freelancerAddr));
-        fContracts.push(FContract(_deliverables, _companyAddr, _freelancerAddr, _companyStakedAmt, _freelancerStakedAmt, _deliveryDelay, _settlementDelay, ContractStatus.CREATED, 0));
+        fContracts.push(FContract(_deliverables, _companyAddr, _freelancerAddr, _companyStakedAmt, _freelancerStakedAmt, _deliveryDelay, _settlementDelay, ContractStatus.CREATED, 0, 0, ""));
+        emit ContractCreated(_deliverables, _companyAddr, _freelancerAddr, _companyStakedAmt, _freelancerStakedAmt, _deliveryDelay, _settlementDelay, msg.sender, fContracts.length-1);
     }
 
     function acceptCompanyPayment(uint contractId) public payable {
@@ -36,8 +49,11 @@ contract FreelanceContract {
 
         if (fContracts[contractId].state == ContractStatus.CREATED) {
             fContracts[contractId].state = ContractStatus.ACCEPTED_BY_COMPANY;
+            emit StakePostedByCompany(contractId);
         } else {
             fContracts[contractId].state = ContractStatus.ACCEPTED_BY_BOTH;
+            emit StakePostedByCompany(contractId);
+            emit ContractAccepted(contractId);
         }
     }
 
@@ -50,8 +66,31 @@ contract FreelanceContract {
 
         if (fContracts[contractId].state == ContractStatus.CREATED) {
             fContracts[contractId].state = ContractStatus.ACCEPTED_BY_FREELANCER;
+            emit StakePostedByFreelancer(contractId);
         } else {
             fContracts[contractId].state = ContractStatus.ACCEPTED_BY_BOTH;
+            emit StakePostedByFreelancer(contractId);
+            emit ContractAccepted(contractId);
+        }
+    }
+
+    function returnCompanyStakedAmt(uint contractId) public payable {
+        require(msg.sender == fContracts[contractId].companyAddr);
+        require(fContracts[contractId].state == ContractStatus.ACCEPTED_BY_COMPANY);
+        //TODO: Do below transaction only if called beyond Accepted Date + Deadline
+        if (true) {
+            fContracts[contractId].companyAddr.transfer(fContracts[contractId].companyStakedAmt);
+            fContracts[contractId].state = ContractStatus.EXPIRED_DUE_TO_NO_FREELANCER_ACCEPTANCE;
+        }
+    }
+
+    function returnFreelancerStakedAmt(uint contractId) public payable {
+        require(msg.sender == fContracts[contractId].freelancerAddr);
+        require(fContracts[contractId].state == ContractStatus.ACCEPTED_BY_FREELANCER);
+        //TODO: Do below transaction only if called beyond Accepted Date + Deadline
+        if (true) {
+            fContracts[contractId].freelancerAddr.transfer(fContracts[contractId].freelancerStakedAmt);
+            fContracts[contractId].state = ContractStatus.EXPIRED_DUE_TO_NO_COMPANY_ACCEPTANCE;
         }
     }
 
@@ -59,6 +98,8 @@ contract FreelanceContract {
         require(fContracts[contractId].state == ContractStatus.ACCEPTED_BY_BOTH);
         //TODO: Store the deliverable in a filecoin storage
         //TODO: Mint an NFT out of it
+        address nftAddr;
+        emit DeliverablesUploaded(contractId, nftAddr);
         fContracts[contractId].state = ContractStatus.ASSETS_DELIVERED;
     }
 
@@ -76,6 +117,7 @@ contract FreelanceContract {
             burnAddr.transfer(stakeToBeBurned);
             fContracts[contractId].companyAddr.transfer(fContracts[contractId].companyStakedAmt);
             fContracts[contractId].state = ContractStatus.EXPIRED_DUE_TO_NON_DELIVERY;
+            emit ContractExpiredDueToNoDelivery(contractId, 0, stakeToBeBurned);
         }
 
     }
