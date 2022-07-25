@@ -10,7 +10,7 @@ interface IERC20 {
 
 contract FreelanceContract {
 
-    address payable escrowAddr;
+    address payable escrowAddr; //TODO: Set escrowAddress by the contract owner
     address payable burnAddr;
     int8 MAX_CONFIRMATION_ATTEMPS_ALLOWED = 5;
     int8 CONTRACT_ACCEPTION_DEADLINE_DAYS = 7;
